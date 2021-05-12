@@ -1,0 +1,233 @@
+---
+title: "Fake news or not"
+author: "Hande Çelebi"
+date: "10 05 2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## FAKE NEWS CLASSIFICATON
+
+
+Every day hundreds of sources such as social media, news channels, politicians or civilians spread fake news. Deciding which one is real or fake sometimes could be hard. Content could be tricky and unfortunetaly we find it highly believable. Nevertheless there are lots of metrics that we can catch fake news. The aim of this study is deciding whether the news are fake or not with machine learning algorithms.
+
+First, we start with recognize the data more close and make some cleaning and adjustment in EDA part. After that we apply appropiate ML methods to predict fake news.
+
+```{r packages and data, include=FALSE}
+news <- read.csv("news_articles.csv")
+
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(caret)
+library(tm)
+library(wordcloud)
+library(wordcloud2)
+library(SnowballC)
+library(RColorBrewer)
+library(caTools)
+library(quanteda)
+library(e1071)
+
+glimpse(news)
+```
+When we glimpse the data we can observe that some variables types are wrong. We need to convert that variables from character to factor in order to analyze correctly.
+
+```{r EDA}
+news$language <- as.factor(news$language)
+news$label <- as.factor(news$label)
+news$hasImage <- as.factor(news$hasImage)
+news$type <- as.factor(news$type)
+```
+
+Now we should observe NA values and we removed from dataset if it is necessary.
+
+```{r NA}
+which(is.na(news))
+
+news <- news %>%
+  drop_na()
+
+```
+
+
+```{r table}
+table(news$label)
+table(news$hasImage)
+table(news$language)
+table(news$type)
+```
+According to the table above, there are 1294 fake news and 801 real news and also we can see how many news in each language, type and how much news has image or not. Let's look at how these variables affect whether the news are fake or not with data visualization.
+
+```{r plots}
+par(mfrow=c(2,2))
+ggplot(news, aes(label,fill = label)) + 
+  geom_bar()
+
+ggplot(news, aes(label, fill = hasImage)) + 
+  geom_bar(position = "fill")
+
+ggplot(news, aes(label, fill = language)) + 
+  geom_bar(position = "fill")
+
+ggplot(news, aes(label, fill = type)) + 
+  geom_bar(position = "fill")
+```
+According to the plots above. We can say that news without images are tend to be fake and types of the fake news are satire, junk science, fake, conspiracy and bullshit; types of the real news are state, hate and bias. We cannot say about language and fake news relation as there are very few observations in different language categories.
+
+
+```{r length}
+news_length <- news %>%
+  mutate(text_length = nchar(text),
+         title_length = nchar(title),
+         url_length = nchar(site_url))
+
+ggplot(news_length, aes(label,title_length)) + 
+  geom_point() + 
+  geom_jitter(aes(colour = label))
+
+ggplot(news_length, aes(label,text_length)) + 
+  geom_point() + 
+  geom_jitter(aes(colour = label))
+
+ggplot(news_length, aes(label,url_length)) + 
+  geom_point() + 
+  geom_jitter(aes(colour = label))
+```
+Now we examine the effect of text, title and url lengths how effect whether news are fake or not. According to the plots above, fake news tend to have longer title and url than real news but we cannot say the same thing about title length precisely. 
+
+```{r summary table}
+summary_table <- news_length %>%
+  group_by(label) %>%
+  summarize(text_mean = mean(text_length),
+            title_mean = mean(title_length),
+            url_mean = mean(url_length))
+summary_table
+```
+Lastly if we observe length mean for all three subject we can get more precise results. Acorrding to the table we can say that fake news have shorter text length, longer title length and url length than real news.
+
+```{r word cloud}
+corpus <- Corpus(VectorSource(news$text_without_stopwords))
+dev.new(width = 1500, height = 1500, unit = "px")
+
+wordcloud(corpus, max.words=200, random.order=FALSE, scale=c(3,.4), rot.per=0.15, colors=brewer.pal(12,"Paired"))
+```
+
+This wordcloud shows that most frequency words from all words in news text. 
+
+# Machine Learning Models
+
+## 1. Naive Bayes
+
+It is a classification method that rely on bayesian approach. It According to naive bayes all the features in the dataset should be independent and equally important. For this reason in most of the case this method couldn't be appropiate because of it couldn't fulfill the assumptions. On the other hand in some cases such as text classification like spam mail detection or in our case (fake news detection) naive bayes fulfill both conditions and get highly well accuracy. It is easy to apply and effective model. Also it could handle with NA's and big messy data.
+
+Let's apply naive method to news dataset. First we have to clean and standardize text data with text mining package which name is "tm".
+
+```{r deneme}
+## text
+corpus_text <- VCorpus(VectorSource((news$text)))
+inspect(corpus_text[1:2])
+as.character(corpus_text[[1565]])
+
+##title
+corpus_title <- VCorpus(VectorSource((news$title)))
+inspect(corpus_title[1:2])
+as.character(corpus_title[[1685]])
+
+```
+Corpus enable to collect text data as a "corpus". We can observe corpus how to stored our text data in code chunk above. We can see that there are punctuations and stopwords in text. Firstly we should clean these before set a model.
+
+```{r corpus}
+## text
+corpus_text_clean <- tm_map(corpus_text, content_transformer(tolower))
+corpus_text_clean <- tm_map(corpus_text_clean, removeWords, stopwords())
+corpus_text_clean <- tm_map(corpus_text_clean, removePunctuation)
+corpus_text_clean <- tm_map(corpus_text_clean, stemDocument)
+corpus_text_clean <- tm_map(corpus_text_clean, stripWhitespace)
+
+as.character(corpus_text_clean[[1565]])
+
+## title
+corpus_title_clean <- tm_map(corpus_title, content_transformer(tolower))
+corpus_title_clean <- tm_map(corpus_title_clean, removeWords, stopwords())
+corpus_title_clean <- tm_map(corpus_title_clean, removePunctuation)
+corpus_title_clean <- tm_map(corpus_title_clean, stemDocument)
+corpus_title_clean <- tm_map(corpus_title_clean, stripWhitespace)
+
+as.character(corpus_title_clean[[1685]])
+
+```
+
+Now corpus looks clean enough to analyze. Next step is Creating a Document Term Matrix that allows to create data structure with corpus. With this way we can split text documents into words.
+
+```{r dtm}
+## text
+news_dtm <- DocumentTermMatrix(corpus_text_clean, control = list(
+  tolower = TRUE,
+  removeNumbers = TRUE,
+  stopwords = TRUE,
+  removePunctuation = TRUE,
+  stemming = TRUE))
+set.seed(1000)
+news_dtm <- removeSparseTerms(news_dtm, 0.9)
+news_dtm
+
+## title
+news_dtm_title <- DocumentTermMatrix(corpus_title_clean, control = list(
+  tolower = TRUE,
+  removeNumbers = TRUE,
+  stopwords = TRUE,
+  removePunctuation = TRUE,
+  stemming = TRUE))
+set.seed(1000)
+news_dtm_title <- removeSparseTerms(news_dtm_title, 0.9)
+news_dtm_title
+
+```
+
+Now we are ready to analyze an we should continue with create test and train data.
+
+```{r dataframe}
+## text
+text_full <- as.matrix(news_dtm)
+text_label <- as.matrix(news$label)
+
+## title
+title_full <- as.matrix(news_dtm_title)
+title_label <- as.matrix(news$label)
+
+```
+
+
+```{r train test}
+training_index <- sample(1:nrow(news), round(nrow(news) * .75))
+
+## text
+set.seed(1000)
+
+text_train <- text_full[training_index,]
+text_test <- text_full[-training_index,]
+naive_text <- naiveBayes(text_train, as.factor(text_label[training_index]))
+pred_text <- predict(naive_text, text_test)
+table(pred_text, text_label[-training_index])
+
+## title
+set.seed(1000)
+
+title_train <- title_full[training_index,]
+title_test <- title_full[-training_index,]
+naive_title <- naiveBayes(title_train, as.factor(title_label[training_index]))
+pred_title <- predict(naive_title, title_test)
+table(pred_title, title_label[-training_index])
+```
+
+```{r accuracy}
+a <- sum(text_label[-training_index] == pred_text)/ length(pred_text)
+a
+b <- sum(title_label[-training_index] == pred_title)/ length(pred_title)
+b
+```
+
