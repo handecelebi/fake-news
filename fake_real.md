@@ -479,7 +479,7 @@ print(c(accuracy_glm,accuracy_glm_text,accuracy_glm_full))
 ```
 Models made with the title in the predicts made by the Logistic regression was the best model with 62% accuracy. But it could not create a better model than naive bayes.
 
-## Random Forest
+## 3. Random Forest
 
 Random Forest is a classifier that contains a number of decision trees on various subsets of the given dataset and takes the average to improve the predictive accuracy of that dataset. 
 
